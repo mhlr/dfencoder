@@ -612,7 +612,7 @@ class AutoEncoder(torch.nn.Module):
                         id_loss.append(net_loss)
 
                     self.logger.end_epoch()
-                    if self.project_embeddings and self.logger == 'tensorboard':
+                    if self.project_embeddings and isinstance(self.logger, TensorboardXLogger):
                         self.logger.show_embeddings(self.categorical_fts)
                     if self.verbose:
                         swapped_loss = np.array(swapped_loss).mean()
