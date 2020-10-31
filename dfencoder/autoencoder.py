@@ -113,7 +113,7 @@ class AutoEncoder(torch.nn.Module):
             betas=(0.9, 0.999),
             dampening=0,
             weight_decay=0,
-            lr_decay=None,
+            lr_scheduler=None,
             nesterov=False,
             verbose=False,
             device=None,
@@ -124,6 +124,8 @@ class AutoEncoder(torch.nn.Module):
             progress_bar=True,
             n_megabatches=1,
             scaler='standard',
+            custom_optimizer_build_fun = None,
+            custom_lrscheduler_build_fun = None,
             *args,
             **kwargs
         ):
@@ -155,7 +157,7 @@ class AutoEncoder(torch.nn.Module):
         self.activation = activation
         self.optimizer = optimizer
         self.lr = lr
-        self.lr_decay = lr_decay
+        self.lr_scheduler = lr_scheduler
         self.amsgrad=amsgrad
         self.momentum=momentum
         self.betas=betas
@@ -184,6 +186,9 @@ class AutoEncoder(torch.nn.Module):
         self.scaler = scaler
 
         self.n_megabatches = n_megabatches
+
+        self.custom_optimizer_build_fun = custom_optimizer_build_fun
+        self.custom_lrscheduler_build_fun = custom_lrscheduler_build_fun
 
     def get_scaler(self, name):
         scalers = {
@@ -396,9 +401,15 @@ class AutoEncoder(torch.nn.Module):
         self.build_outputs(dim)
 
         #get optimizer
-        self.optim = self.build_optimizer()
-        if self.lr_decay is not None:
-            self.lr_decay = torch.optim.lr_scheduler.ExponentialLR(self.optim, self.lr_decay)
+        if self.custom_optimizer_build_fun is not None:
+            self.optim = self.custom_optimizer_build_fun(self.parameters())
+        else:
+            self.optim = self.build_optimizer()
+        
+        if self.custom_lrscheduler_build_fun is not None:
+            self.lr_scheduler = self.custom_lrscheduler_build_fun(self.optim)
+        elif self.lr_scheduler is not None:
+            self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optim, self.lr_scheduler)
 
         cat_names = list(self.categorical_fts.keys())
         fts = self.num_names + self.bin_names + cat_names
@@ -587,8 +598,8 @@ class AutoEncoder(torch.nn.Module):
                 input_df = df.swap(likelihood=self.swap_p)
                 self.train_epoch(n_updates, input_df, df)
 
-            if self.lr_decay is not None:
-                self.lr_decay.step()
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
             if val is not None:
                 self.eval()
